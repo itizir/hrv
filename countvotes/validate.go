@@ -108,7 +108,7 @@ func (con contest) validate() []string {
 		} else if l > 1 {
 			offenses[l-1] = "_and_ " + offenses[l-1]
 		}
-		irregularities = append(irregularities, fmt.Sprintf("%s is on the naughty list!\nThey %s! 🙀", p, strings.Join(offenses, ", ")))
+		irregularities = append(irregularities, fmt.Sprintf("%s is on the naughty list! They %s! 🙀", p, strings.Join(offenses, ", ")))
 	}
 
 	// Make the ordering deterministic, but just to an approximate thing for biggest offenders first...

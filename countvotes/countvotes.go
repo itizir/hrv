@@ -3,6 +3,8 @@ package countvotes
 import (
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -35,44 +37,50 @@ func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		return errors.New("invalid argument value")
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Coming right up, calculating winners of <#%s>!", chanID),
-		},
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
-	s.ChannelTyping(i.ChannelID)
-
-	posts, err := fetchPosts(s, guildID, chanID)
 	if err != nil {
-		s.ChannelMessageSend(i.ChannelID, fmt.Sprintf("Oops! Failed to do so: %v", err))
+		log.Println("failed to respond to interactions:", err)
 		return nil
 	}
 
+	resp := determineResults(s, guildID, chanID)
+
+	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &resp})
+	if err != nil {
+		log.Println("failed to edit response:", err)
+	}
+
+	return nil
+}
+
+func determineResults(s *discordgo.Session, guildID, chanID string) string {
+	posts, err := fetchPosts(s, guildID, chanID)
+	if err != nil {
+		return fmt.Sprintf("Oops! Failed to get the data from <#%v>: %v", chanID, err)
+	}
+
+	resp := ""
 	con := contest{posts: posts}
 
 	if irregularities := con.validate(); len(irregularities) > 0 {
-		s.ChannelMessageSend(i.ChannelID, "Oh no! Found some irregularities:")
-		for _, irr := range irregularities {
-			s.ChannelMessageSend(i.ChannelID, irr)
-		}
-		s.ChannelMessageSend(i.ChannelID, "...so the results shouldn't be trusted. 😿")
+		resp += "Oh no! Found some irregularities:\n"
+		resp += "- " + strings.Join(irregularities, "\n- ") + "\n"
+		resp += "...so the results shouldn't be trusted. 😿\n\n"
 	}
 
 	win := con.winners()
 	if l := len(win); l == 0 {
-		s.ChannelMessageSend(i.ChannelID, "Ooof! Could not determine any winners!")
+		resp += fmt.Sprintf("Ooof! Could not determine _any_ winners in <#%v>!", chanID)
+		return resp
 	} else if l < 1+len(emojiSecondary) {
-		s.ChannelMessageSend(i.ChannelID, "Could not determine winners for all categories... Undecidable ties, or too few eligible submissions. Sad.")
+		resp += "Could not determine winners for all categories: undecidable ties, or too few eligible submissions. Sad. Well, anyway...\n\n"
 	}
 
-	resp := fmt.Sprintf("...without further ado, the winners of <#%s>:\n\n", chanID)
-	for _, w := range win {
-		resp += fmt.Sprintf("%v\n\n", w)
-	}
-	resp = resp[:len(resp)-2]
+	resp += fmt.Sprintf("🥁 Without further ado, the winners of <#%s>:\n", chanID)
+	resp += "- " + strings.Join(win, "\n- ") + "\n"
+	resp += "Congratulations! 🎉"
 
-	s.ChannelMessageSend(i.ChannelID, resp)
-
-	return nil
+	return resp
 }

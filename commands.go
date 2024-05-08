@@ -25,7 +25,6 @@ func init() {
 
 func interactionHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-		s.ChannelTyping(i.ChannelID)
 		if err := h(s, i); err != nil {
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,

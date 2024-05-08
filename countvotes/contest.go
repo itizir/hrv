@@ -31,7 +31,7 @@ func (con contest) orderedCategories() []string {
 // giving the win of the tied category to the submission not eligible for another win.
 // If this is still not enough, attempt to break ties by including number of plays and other votes,
 // as described in `postCmp`.
-func (con contest) winners() []*post {
+func (con contest) winners() []string {
 	if len(con.posts) == 0 {
 		return nil
 	}
@@ -84,10 +84,10 @@ func (con contest) winners() []*post {
 		}
 	}
 
-	var retval []*post
+	var retval []string
 	for _, cat := range append([]string{emojiMain}, emojiSecondary...) {
 		if w, ok := win[cat]; ok {
-			retval = append(retval, w)
+			retval = append(retval, w.String())
 		}
 	}
 	return retval

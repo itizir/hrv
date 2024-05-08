@@ -56,7 +56,7 @@ func (p post) String() string {
 	if p.author != "" {
 		author = p.author
 	}
-	str += fmt.Sprintf("%s, by %s", p.thread, author)
+	str += fmt.Sprintf("%s (%s)", p.thread, author)
 
 	if p.won == "" {
 		return str
@@ -70,7 +70,7 @@ func (p post) String() string {
 	} else if n == 1 {
 		name = "vote"
 	}
-	str += fmt.Sprintf(" (with %v %s)", n, name)
+	str += fmt.Sprintf(" — with %v %s", n, name)
 
 	return str
 }
