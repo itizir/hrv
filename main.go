@@ -11,7 +11,10 @@ import (
 )
 
 var (
-	token    = os.Getenv("BOT_TOKEN")
+	token     = os.Getenv("BOT_TOKEN")
+	pubKeyHex = os.Getenv("PUBKEY")
+
+	wsMode   = flag.Bool("ws", false, "run in websocket mode instead of listening for incoming webhooks")
 	register = flag.Bool("register", false, "register bot commands with discord; add the -cleanup flag to first remove any old commands")
 	cleanup  = flag.Bool("cleanup", false, "when running with -register, also first remove any previously registered commands")
 )
@@ -21,6 +24,12 @@ func init() {
 }
 
 func main() {
+	var err error
+	pubKey, err = parsePubKey(pubKeyHex)
+	if err != nil {
+		log.Println(err)
+	}
+
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
@@ -35,27 +44,35 @@ func run() error {
 		return err
 	}
 
-	s.AddHandler(interactionHandler)
-
-	err = s.Open()
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
 	if *register {
+		app, err := s.Application("@me")
+		if err != nil {
+			return err
+		}
+
 		if *cleanup {
-			if err := cleanupCommands(s); err != nil {
+			if err := cleanupCommands(s, app.ID); err != nil {
 				return err
 			}
 		}
-		return registerCommands(s)
+		return registerCommands(s, app.ID)
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-	log.Println("Bot now connected and ready. Press Ctrl+C to exit...")
-	<-stop
+	if *wsMode {
+		s.AddHandler(interactionHandler(true))
+		err = s.Open()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt)
+		log.Println("Bot now connected and ready. Press Ctrl+C to exit...")
+		<-stop
+	} else {
+		listenAndServe()
+	}
 
 	return nil
 }

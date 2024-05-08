@@ -3,7 +3,6 @@ package countvotes
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -37,19 +36,11 @@ func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		return errors.New("invalid argument value")
 	}
 
-	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-	})
-	if err != nil {
-		log.Println("failed to respond to interactions:", err)
-		return nil
-	}
-
 	resp := determineResults(s, guildID, chanID)
 
-	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &resp})
+	_, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{Content: &resp})
 	if err != nil {
-		log.Println("failed to edit response:", err)
+		return fmt.Errorf("failed to edit response: %w", err)
 	}
 
 	return nil
