@@ -1,1 +1,4 @@
 secrets.go
+app.yaml
+appengine
+.gcloudignore
