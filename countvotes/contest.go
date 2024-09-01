@@ -39,10 +39,11 @@ func (con contest) winners() []string {
 	win := make(map[string]*post)
 	categories := con.orderedCategories()
 	superficialTies := true
+	mainCategoryMaxVotes := 0
 
 	for {
 		foundNewWinner := false
-		for _, cat := range categories {
+		for i, cat := range categories {
 			if _, ok := win[cat]; ok {
 				continue
 			}
@@ -57,8 +58,12 @@ func (con contest) winners() []string {
 
 			numTied := 0
 			maxVotes := candidates[0].numReact(cat)
+			if i == 0 && mainCategoryMaxVotes == 0 {
+				mainCategoryMaxVotes = maxVotes
+			}
 			for _, c := range candidates[1:] {
-				if (superficialTies && c.numReact(cat) == maxVotes) || postCmp(cat)(candidates[0], c) == 0 {
+				// always consider tie-breakers for main category!
+				if (i > 0 && superficialTies && c.numReact(cat) == maxVotes) || postCmp(cat)(candidates[0], c) == 0 {
 					numTied++
 				} else {
 					break
@@ -87,7 +92,11 @@ func (con contest) winners() []string {
 	var retval []string
 	for _, cat := range append([]string{emojiMain}, emojiSecondary...) {
 		if w, ok := win[cat]; ok {
-			retval = append(retval, w.String())
+			res := w.String()
+			if cat == emojiMain && w.numReact(emojiMain) < mainCategoryMaxVotes {
+				res = "COULD NOT BREAK TIE! OVERALL WINNER HAS FEWER POINTS THAN OTHER SUBMISSIONS!\n" + res
+			}
+			retval = append(retval, res)
 		}
 	}
 	return retval
