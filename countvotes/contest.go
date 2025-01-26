@@ -2,6 +2,7 @@ package countvotes
 
 import (
 	"slices"
+	"strings"
 )
 
 type contest struct {
@@ -96,6 +97,31 @@ func (con contest) winners() []string {
 			if cat == emojiMain && w.numReact(emojiMain) < mainCategoryMaxVotes {
 				res = "COULD NOT BREAK TIE! OVERALL WINNER HAS FEWER POINTS THAN OTHER SUBMISSIONS!\n" + res
 			}
+
+			var better, ties []string
+			for _, p := range con.posts {
+				if p.thread == w.thread {
+					continue
+				}
+				if np, nw := p.numReact(cat), w.numReact(cat); np > nw {
+					if p.won == "" {
+						res += "... but shouldn't " + p.thread + " have won?!?"
+					} else {
+						better = append(better, p.thread)
+					}
+				} else if np == nw {
+					ties = append(ties, p.thread)
+				}
+			}
+			if len(better) > 0 || len(ties) > 0 {
+				if len(better) > 0 {
+					res += "\n   more votes, but won something else:\n    " + strings.Join(better, "\n    ")
+				}
+				if len(ties) > 0 {
+					res += "\n   tied number of votes:\n    " + strings.Join(ties, "\n    ")
+				}
+			}
+
 			retval = append(retval, res)
 		}
 	}
