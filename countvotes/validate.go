@@ -19,24 +19,29 @@ func (con contest) validate() []string {
 		submissions    int
 		votesTotal     int
 		mainVotesTotal int
+		playedTotal    int
 		selfVote       bool
-		overVoted      bool
-		missingPlayed  bool
+		overVoted      []string
+		missingPlayed  []string
 	}
 
 	participants := make(map[string]*stats)
-
-	for _, p := range con.posts {
-		s, ok := participants[p.author]
+	getStats := func(p string) *stats {
+		s, ok := participants[p]
 		if !ok {
 			s = &stats{}
-			participants[p.author] = s
+			participants[p] = s
 		}
-		s.submissions++
+		return s
+	}
+
+	for _, p := range con.posts {
+		getStats(p.author).submissions++
 
 		hasPlayed := make(map[string]bool)
 		for _, u := range p.reactions[emojiPlayed] {
 			hasPlayed[u] = true
+			getStats(u).playedTotal++
 		}
 
 		numVotesPost := make(map[string]int)
@@ -45,17 +50,13 @@ func (con contest) validate() []string {
 				continue
 			}
 			for _, voter := range voters {
-				s, ok := participants[voter]
-				if !ok {
-					s = &stats{}
-					participants[voter] = s
-				}
+				s := getStats(voter)
 
 				if voter == p.author {
 					s.selfVote = true
 				}
-				if !hasPlayed[voter] {
-					s.missingPlayed = true
+				if l := len(s.missingPlayed); !hasPlayed[voter] && (l == 0 || s.missingPlayed[l-1] != p.thread) {
+					s.missingPlayed = append(s.missingPlayed, p.thread)
 				}
 
 				if k == emojiMain {
@@ -63,8 +64,8 @@ func (con contest) validate() []string {
 				} else {
 					s.votesTotal++
 					numVotesPost[voter]++
-					if numVotesPost[voter] > 2 {
-						s.overVoted = true
+					if numVotesPost[voter] == 3 { // max 2 per submission
+						s.overVoted = append(s.overVoted, p.thread)
 					}
 				}
 			}
@@ -91,16 +92,19 @@ func (con contest) validate() []string {
 			offenses = append(offenses, "voted for their own submission")
 		}
 		if s.mainVotesTotal > 1 {
-			offenses = append(offenses, "gave out too many "+mainVote)
+			offenses = append(offenses, fmt.Sprintf("gave out %d %s", s.mainVotesTotal, mainVote))
 		}
 		if s.votesTotal > len(con.posts) {
-			offenses = append(offenses, "gave out too many votes overall")
+			offenses = append(offenses, fmt.Sprintf("gave out %d instead of max %d votes overall", s.votesTotal, len(con.posts)))
 		}
-		if s.overVoted {
-			offenses = append(offenses, "gave out too many votes to a given submission")
+		if len(s.overVoted) > 0 {
+			offenses = append(offenses, fmt.Sprintf("gave out too many votes to %s", strings.Join(s.overVoted, ", ")))
 		}
-		if s.missingPlayed {
-			offenses = append(offenses, "voted without reacting with "+playedReaction)
+		if len(s.missingPlayed) > 0 {
+			offenses = append(offenses, fmt.Sprintf("voted without reacting with %s on %s", playedReaction, strings.Join(s.missingPlayed, ", ")))
+		}
+		if s.submissions > 0 && s.mainVotesTotal+s.votesTotal+s.playedTotal == 0 {
+			offenses = append(offenses, "seem to not have made any efforts in voting despite making a contest submission")
 		}
 
 		if l := len(offenses); l == 0 {
