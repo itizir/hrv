@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/itizir/hrv/countvotes"
@@ -25,21 +26,21 @@ func init() {
 	}
 }
 
-func interactionHandler(withAck bool) func(*discordgo.Session, *discordgo.InteractionCreate) {
-	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			if withAck {
-				err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-				})
-				if err != nil {
-					log.Println("failed to respond to interaction:", err)
-					return
-				}
-			}
-			if err := h(s, i); err != nil {
-				log.Println("handler failed:", err)
-			}
+func interactionHandle(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	var name string
+	switch i.Type {
+	case discordgo.InteractionApplicationCommand:
+		name = i.ApplicationCommandData().Name
+	case discordgo.InteractionMessageComponent:
+		spl := strings.SplitN(i.MessageComponentData().CustomID, ":", 2)
+		name = spl[0]
+	}
+
+	if h, ok := commandHandlers[name]; ok {
+		if err := h(s, i); err != nil {
+			log.Println("handler failed:", err)
 		}
+	} else {
+		log.Println("no handler for", name, i)
 	}
 }
