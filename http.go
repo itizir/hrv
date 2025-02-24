@@ -53,29 +53,24 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respType := discordgo.InteractionResponseDeferredChannelMessageWithSource
 	if i.Type == discordgo.InteractionPing {
-		respType = discordgo.InteractionResponsePong
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(discordgo.InteractionResponse{
-		Type: respType,
-	})
-	if err != nil {
-		log.Println("error sending response:", err)
-	}
-
-	if i.Type == discordgo.InteractionPing {
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponsePong,
+		})
+		if err != nil {
+			log.Println("error sending response:", err)
+		}
 		return
 	}
 
+	w.WriteHeader(http.StatusAccepted)
 	go func() {
 		s, err := discordgo.New("Bot " + token)
 		if err != nil {
 			log.Println("failed to create session", err)
 			return
 		}
-		interactionHandler(false)(s, i)
+		interactionHandle(s, i)
 	}()
 }

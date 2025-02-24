@@ -54,7 +54,7 @@ func (p post) String() string {
 
 	author := "_unknown_"
 	if p.author != "" {
-		author = p.author
+		author = userMention(p.author)
 	}
 	str += fmt.Sprintf("%s (%s)", p.thread, author)
 
@@ -90,7 +90,7 @@ func (p post) totVotes() int {
 	return t
 }
 
-func fetchPosts(s *discordgo.Session, guildID, chanID string) ([]*post, error) {
+func fetchPosts(s *discordgo.Session, guildID, chanID string, excludedVoters, excludedContestants map[string]bool) ([]*post, error) {
 	var posts []*post
 
 	t0 := time.Now()
@@ -110,6 +110,10 @@ func fetchPosts(s *discordgo.Session, guildID, chanID string) ([]*post, error) {
 		return nil, err
 	}
 	threads = append(threads, archived.Threads...)
+
+	threads = slices.DeleteFunc(threads, func(c *discordgo.Channel) bool {
+		return excludedContestants[c.OwnerID]
+	})
 
 	postsChan := make(chan *post, len(threads))
 	errChan := make(chan error, len(threads))
@@ -138,14 +142,17 @@ func fetchPosts(s *discordgo.Session, guildID, chanID string) ([]*post, error) {
 
 				var userStrings []string
 				for _, u := range users {
-					userStrings = append(userStrings, u.Mention())
+					if excludedVoters[u.ID] {
+						continue
+					}
+					userStrings = append(userStrings, u.ID)
 				}
 				rcts[react.Emoji.Name] = userStrings
 			}
 
 			postsChan <- &post{
 				thread:    thread.Mention(),
-				author:    msg.Author.Mention(),
+				author:    msg.Author.ID,
 				reactions: rcts,
 			}
 		}(thread)
@@ -165,4 +172,8 @@ func fetchPosts(s *discordgo.Session, guildID, chanID string) ([]*post, error) {
 	}
 
 	return posts, nil
+}
+
+func userMention(id string) string {
+	return (&discordgo.User{ID: id}).Mention()
 }

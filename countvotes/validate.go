@@ -14,7 +14,7 @@ import (
 // - only as many 'secondary' votes allowed as number of contest entries
 // - max 2 'secondary' votes per submission per voter
 // - voters should mark submissions they have evaluated with the 'played' reaction
-func (con contest) validate() []string {
+func (con contest) validate(excludedVoters map[string]bool) []string {
 	type stats struct {
 		submissions    int
 		votesTotal     int
@@ -84,6 +84,10 @@ func (con contest) validate() []string {
 
 	var irregularities []string
 	for p, s := range participants {
+		if excludedVoters[p] {
+			continue
+		}
+
 		var offenses []string
 		if s.submissions > 1 {
 			offenses = append(offenses, "made more than one submission")
@@ -112,7 +116,7 @@ func (con contest) validate() []string {
 		} else if l > 1 {
 			offenses[l-1] = "_and_ " + offenses[l-1]
 		}
-		irregularities = append(irregularities, fmt.Sprintf("%s is on the naughty list! They %s! 🙀", p, strings.Join(offenses, ", ")))
+		irregularities = append(irregularities, fmt.Sprintf("%s is on the naughty list! They %s! 🙀", userMention(p), strings.Join(offenses, ", ")))
 	}
 
 	// Make the ordering deterministic, but just to an approximate thing for biggest offenders first...
