@@ -13,8 +13,8 @@ import (
 const (
 	optionChannel = "channel"
 
-	selectExcludeVoters       = "exclude_voters"
-	selectExcludeParticipants = "exclude_participants"
+	selectExcludeVoters      = "exclude_voters"
+	selectExcludeContestants = "exclude_contestants"
 
 	buttonValidate = "validate"
 	buttonResults  = "results"
@@ -41,10 +41,10 @@ var (
 )
 
 type options struct {
-	channel              string
-	validateOnly         bool
-	excludedVoters       []string
-	excludedParticipants []string
+	channel             string
+	validateOnly        bool
+	excludedVoters      []string
+	excludedContestants []string
 }
 
 func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
@@ -68,7 +68,7 @@ func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 			unknown = unknown[:maxSelections]
 		}
 		opts.excludedVoters = append(opts.excludedVoters, unknown...)
-		opts.excludedParticipants = append(opts.excludedParticipants, unknown...)
+		opts.excludedContestants = append(opts.excludedContestants, unknown...)
 
 		_, err = s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
 			Components: components(opts),
@@ -88,7 +88,7 @@ func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	action := messageInteractionUpdate(i.MessageComponentData(), &opts)
 
 	switch action {
-	case selectExcludeVoters, selectExcludeParticipants:
+	case selectExcludeVoters, selectExcludeContestants:
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
@@ -138,12 +138,12 @@ func determineResults(s *discordgo.Session, guildID string, opts options) string
 	for _, u := range opts.excludedVoters {
 		excludedVoters[u] = true
 	}
-	excludedParticipants := make(map[string]bool)
-	for _, u := range opts.excludedParticipants {
-		excludedParticipants[u] = true
+	excludedContestants := make(map[string]bool)
+	for _, u := range opts.excludedContestants {
+		excludedContestants[u] = true
 	}
 
-	posts, err := fetchPosts(s, guildID, opts.channel, excludedVoters, excludedParticipants)
+	posts, err := fetchPosts(s, guildID, opts.channel, excludedVoters, excludedContestants)
 	if err != nil {
 		return fmt.Sprintf("Oops! Failed to get the data from <#%v>: %v.", opts.channel, err)
 	}
@@ -201,8 +201,8 @@ func messageInteractionUpdate(data discordgo.MessageComponentInteractionData, op
 	switch action {
 	case selectExcludeVoters:
 		opts.excludedVoters = data.Values
-	case selectExcludeParticipants:
-		opts.excludedParticipants = data.Values
+	case selectExcludeContestants:
+		opts.excludedContestants = data.Values
 	case buttonValidate:
 		opts.validateOnly = true
 	}
@@ -216,12 +216,12 @@ func components(opts options) []discordgo.MessageComponent {
 		return ApplicationCommand.Name + ":" + opts.channel + ":" + id
 	}
 
-	var excludedVoters, excludedParticipants []discordgo.SelectMenuDefaultValue
+	var excludedVoters, excludedContestants []discordgo.SelectMenuDefaultValue
 	for _, u := range opts.excludedVoters {
 		excludedVoters = append(excludedVoters, discordgo.SelectMenuDefaultValue{ID: u, Type: discordgo.SelectMenuDefaultValueUser})
 	}
-	for _, u := range opts.excludedParticipants {
-		excludedParticipants = append(excludedParticipants, discordgo.SelectMenuDefaultValue{ID: u, Type: discordgo.SelectMenuDefaultValueUser})
+	for _, u := range opts.excludedContestants {
+		excludedContestants = append(excludedContestants, discordgo.SelectMenuDefaultValue{ID: u, Type: discordgo.SelectMenuDefaultValueUser})
 	}
 
 	return []discordgo.MessageComponent{
@@ -241,11 +241,11 @@ func components(opts options) []discordgo.MessageComponent {
 			Components: []discordgo.MessageComponent{
 				discordgo.SelectMenu{
 					MenuType:      discordgo.UserSelectMenu,
-					CustomID:      elementID(selectExcludeParticipants),
+					CustomID:      elementID(selectExcludeContestants),
 					MinValues:     &zero,
 					MaxValues:     maxSelections,
-					Placeholder:   "Excluded Participants",
-					DefaultValues: excludedParticipants,
+					Placeholder:   "Excluded Contestants",
+					DefaultValues: excludedContestants,
 				},
 			},
 		},
@@ -291,7 +291,7 @@ func fromDefaultValues(c []discordgo.MessageComponent) options {
 		return vals
 	}
 	opts.excludedVoters = getPlaceholderValues(c[0].(*discordgo.ActionsRow).Components)
-	opts.excludedParticipants = getPlaceholderValues(c[1].(*discordgo.ActionsRow).Components)
+	opts.excludedContestants = getPlaceholderValues(c[1].(*discordgo.ActionsRow).Components)
 	return opts
 }
 
