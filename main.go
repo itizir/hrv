@@ -59,7 +59,7 @@ func run() error {
 	}
 
 	if *wsMode {
-		s.AddHandler(interactionHandler(true))
+		s.AddHandler(interactionHandle)
 		err = s.Open()
 		if err != nil {
 			return err
