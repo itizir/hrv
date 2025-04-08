@@ -169,7 +169,7 @@ func determineResults(s *discordgo.Session, guildID string, opts options) string
 		if resp != "" {
 			resp = fmt.Sprintf("Validating <#%s> without revealing results...\n\n%s", opts.channel, resp)
 		} else {
-			resp = "No irregularities in <#%s>! 👏"
+			resp = fmt.Sprintf("No irregularities in <#%s>! 👏", opts.channel)
 		}
 	} else {
 		resp += fmt.Sprintf("🥁 Without further ado, the winners of <#%s>:\n", opts.channel)
