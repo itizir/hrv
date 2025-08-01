@@ -134,24 +134,50 @@ func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 }
 
 func determineResults(s *discordgo.Session, guildID string, opts options) string {
+	resp := ""
+
 	excludedVoters := make(map[string]bool)
-	for _, u := range opts.excludedVoters {
+	if len(opts.excludedVoters) > 0 {
+		resp += "Ignored voters: "
+	}
+	for i, u := range opts.excludedVoters {
+		resp += userMention(u)
+		if i < len(opts.excludedVoters)-1 {
+			resp += ", "
+		} else {
+			resp += ".\n"
+		}
 		excludedVoters[u] = true
 	}
+
 	excludedContestants := make(map[string]bool)
-	for _, u := range opts.excludedContestants {
+	if len(opts.excludedContestants) > 0 {
+		resp += "Ignored contestants: "
+	}
+	for i, u := range opts.excludedContestants {
+		resp += userMention(u)
+		if i < len(opts.excludedContestants)-1 {
+			resp += ", "
+		} else {
+			resp += ".\n"
+		}
 		excludedContestants[u] = true
+	}
+
+	if len(resp) > 0 {
+		resp += "\n"
 	}
 
 	posts, err := fetchPosts(s, guildID, opts.channel, excludedVoters, excludedContestants)
 	if err != nil {
-		return fmt.Sprintf("Oops! Failed to get the data from <#%v>: %v.", opts.channel, err)
+		return fmt.Sprintf("%sOops! Failed to get the data from <#%v>: %v.", resp, opts.channel, err)
 	}
 
-	resp := ""
 	con := contest{posts: posts}
 
+	hasIrregularities := false
 	if irregularities := con.validate(excludedVoters); len(irregularities) > 0 {
+		hasIrregularities = true
 		resp += "Oh no! Found some irregularities:\n"
 		resp += "- " + strings.Join(irregularities, "\n- ") + "\n"
 		resp += "...so the results shouldn't be trusted. 😿\n\n"
@@ -162,14 +188,15 @@ func determineResults(s *discordgo.Session, guildID string, opts options) string
 		resp += fmt.Sprintf("Ooof! Could not determine _any_ winners in <#%v>!", opts.channel)
 		return resp
 	} else if l < 1+len(emojiSecondary) {
+		hasIrregularities = true
 		resp += "Could not determine winners for all categories: undecidable ties, or too few eligible submissions. Sad. Well, anyway...\n\n"
 	}
 
 	if opts.validateOnly {
-		if resp != "" {
+		if hasIrregularities {
 			resp = fmt.Sprintf("Validating <#%s> without revealing results...\n\n%s", opts.channel, resp)
 		} else {
-			resp = fmt.Sprintf("No irregularities in <#%s>! 👏", opts.channel)
+			resp = fmt.Sprintf("No irregularities in <#%s>! 👏\n\n%s", opts.channel, resp)
 		}
 	} else {
 		resp += fmt.Sprintf("🥁 Without further ado, the winners of <#%s>:\n", opts.channel)
