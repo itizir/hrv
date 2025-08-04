@@ -6,13 +6,16 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/itizir/hrv/countvotes"
+	"github.com/itizir/hrv/leaderboard"
 )
 
 type Handler func(s *discordgo.Session, i *discordgo.InteractionCreate) error
 
 var (
 	commands = map[*discordgo.ApplicationCommand]Handler{
-		countvotes.ApplicationCommand: countvotes.Handle,
+		countvotes.ApplicationCommand:       countvotes.Handle,
+		leaderboard.ApplicationCommand:      leaderboard.Handle,
+		leaderboard.ApplicationAdminCommand: leaderboard.HandleAdmin,
 	}
 
 	commandHandlers map[string]Handler
@@ -34,6 +37,8 @@ func interactionHandle(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case discordgo.InteractionMessageComponent:
 		spl := strings.SplitN(i.MessageComponentData().CustomID, ":", 2)
 		name = spl[0]
+	case discordgo.InteractionModalSubmit:
+		name = i.ModalSubmitData().CustomID
 	}
 
 	if h, ok := commandHandlers[name]; ok {

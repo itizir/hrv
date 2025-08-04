@@ -5,6 +5,7 @@ go 1.22
 require (
 	cloud.google.com/go/secretmanager v1.13.0
 	github.com/bwmarrin/discordgo v0.28.1
+	golang.org/x/text v0.14.0
 )
 
 require (
@@ -32,7 +33,6 @@ require (
 	golang.org/x/oauth2 v0.19.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/api v0.177.0 // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
