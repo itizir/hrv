@@ -129,7 +129,7 @@ func parseModalInput(s *discordgo.Session, i *discordgo.InteractionCreate) (ent 
 			ent.userID = mem[0].User.ID
 		} else {
 			// don't go crazy with sanitisation, but don't allow callers to pollute with unexpected line breaks
-			ent.name = strings.ReplaceAll(v, "\n", "")
+			ent.name = strings.ReplaceAll(v, "\n", " ")
 		}
 	}
 
