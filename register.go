@@ -6,11 +6,11 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func registerCommands(s *discordgo.Session, appID string) error {
+func registerCommands(s *discordgo.Session, appID, guildID string) error {
 	log.Println("Registering commands...")
 
 	for c := range commands {
-		cmd, err := s.ApplicationCommandCreate(appID, "", c)
+		cmd, err := s.ApplicationCommandCreate(appID, guildID, c)
 		if err != nil {
 			return err
 		}
@@ -25,16 +25,18 @@ func registerCommands(s *discordgo.Session, appID string) error {
 	return nil
 }
 
-func cleanupCommands(s *discordgo.Session, appID string) error {
+func cleanupCommands(s *discordgo.Session, appID, guildID string) error {
 	log.Println("Cleaning up commands...")
 
-	guilds, err := s.UserGuilds(200, "", "", false)
-	if err != nil {
-		return err
-	}
-	guildIDs := []string{""}
-	for _, g := range guilds {
-		guildIDs = append(guildIDs, g.ID)
+	guildIDs := []string{guildID}
+	if guildID == "" {
+		guilds, err := s.UserGuilds(200, "", "", false)
+		if err != nil {
+			return err
+		}
+		for _, g := range guilds {
+			guildIDs = append(guildIDs, g.ID)
+		}
 	}
 
 	for _, guildID := range guildIDs {
