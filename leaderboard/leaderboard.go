@@ -67,7 +67,7 @@ func editLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate) error
 		update []string
 	)
 	for _, e := range entries {
-		r, n, isID := partialParsing(e)
+		r, n, isID := getRankAndName(e)
 		if (isID && n == ent.userID) || n == ent.name {
 			continue
 		}
