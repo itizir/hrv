@@ -69,7 +69,7 @@ const (
 )
 
 func HandleAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	// for now insist it can only me me. better solution would be role-based enforced in Guild settings instead of done here in the handler
+	// for now insist it can only be me. better solution would be role-based enforced in Guild settings instead of done here in the handler
 	if i.Member == nil || i.Member.User.ID != AdminID {
 		return s.InteractionRespond(i.Interaction,
 			&discordgo.InteractionResponse{
