@@ -17,6 +17,7 @@ var (
 	wsMode   = flag.Bool("ws", false, "run in websocket mode instead of listening for incoming webhooks")
 	register = flag.Bool("register", false, "register bot commands with discord; add the -cleanup flag to first remove any old commands")
 	cleanup  = flag.Bool("cleanup", false, "when running with -register, also first remove any previously registered commands")
+	guildID  = flag.String("guild", "", "optionally restrict register/cleanup to a single guild")
 )
 
 func init() {
@@ -51,11 +52,11 @@ func run() error {
 		}
 
 		if *cleanup {
-			if err := cleanupCommands(s, app.ID); err != nil {
+			if err := cleanupCommands(s, app.ID, *guildID); err != nil {
 				return err
 			}
 		}
-		return registerCommands(s, app.ID)
+		return registerCommands(s, app.ID, *guildID)
 	}
 
 	if *wsMode {
