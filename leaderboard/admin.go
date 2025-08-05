@@ -1,6 +1,7 @@
 package leaderboard
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -69,7 +70,7 @@ const (
 
 func HandleAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	// for now insist it can only me me. better solution would be role-based enforced in Guild settings instead of done here in the handler
-	if i.Member == nil || (i.Member.User.ID != AdminID && !slices.Contains(i.Member.Roles, "")) {
+	if i.Member == nil || i.Member.User.ID != AdminID {
 		return s.InteractionRespond(i.Interaction,
 			&discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -135,7 +136,7 @@ func optionsToDict(opts []*discordgo.ApplicationCommandInteractionDataOption) ma
 
 func deleteEntry(s *discordgo.Session, i *discordgo.InteractionCreate, name string, rank, season int) error {
 	if name == "" && rank < 1 {
-		return fmt.Errorf("need at least name or rank")
+		return errors.New("need at least name or rank")
 	}
 
 	thread, _, err := getSeasonThread(s, i.GuildID, i.AppID, season)
@@ -150,9 +151,10 @@ func deleteEntry(s *discordgo.Session, i *discordgo.InteractionCreate, name stri
 	}
 
 	match := func(s string) bool {
-		i := strings.Index(s, "\\. ")
+		sep := "\\. "
+		i := strings.Index(s, sep)
 		if i > 0 {
-			s = s[i+3:]
+			s = s[i+len(sep):]
 		}
 		return strings.HasPrefix(s, name)
 	}
