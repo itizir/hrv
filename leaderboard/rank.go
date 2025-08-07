@@ -28,12 +28,16 @@ func userMention(id string) string {
 }
 
 func (r entry) String() string {
-	p := message.NewPrinter(language.English)
-
 	player := r.name
 	if r.userID != "" {
 		player = userMention(r.userID)
 	}
+
+	if r.rank == 0 {
+		return player
+	}
+
+	p := message.NewPrinter(language.English)
 	pts := "(?)"
 	if r.points > 0 {
 		rounded := int(math.Round(float64(r.points) / 1000.))
