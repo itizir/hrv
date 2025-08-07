@@ -92,9 +92,9 @@ func HandleAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 		vals := optionsToDict(o.Options)
 		name, _ := vals[adminCommandArgKeyName].(string)
 		if name != "" {
-			mem, err := s.GuildMembersSearch(i.GuildID, name, 2)
-			if err == nil && len(mem) == 1 {
-				name = userMention(mem[0].User.ID)
+			id, err := findUserID(s, i.GuildID, name)
+			if err == nil && id != "" {
+				name = userMention(id)
 			}
 		}
 		rank, _ := vals[adminCommandArgKeyRank].(float64)
@@ -110,10 +110,11 @@ func HandleAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	case adminCommandStartSeason:
 		vals := optionsToDict(o.Options)
 		name, _ := vals[adminCommandArgKeyName].(string)
-		if err := createSeasonThread(s, i.GuildID, name); err != nil {
-			return err
+		if err := createSeasonThread(s, i.GuildID, i.AppID, name); err != nil {
+			msg = err.Error()
+		} else {
+			msg = "OK!"
 		}
-		msg = "OK!"
 	}
 
 	return s.InteractionRespond(i.Interaction,
@@ -147,31 +148,54 @@ func deleteEntry(s *discordgo.Session, i *discordgo.InteractionCreate, name stri
 	msg, err := s.ChannelMessage(thread.ID, thread.ID)
 	if err != nil {
 		log.Printf("failed to fetch message %v: %v", thread.ID, err)
-		return fmt.Errorf("failed to fetch message")
+		return errors.New("failed to fetch message")
 	}
 
+	blockNumber := 0
 	match := func(s string) bool {
-		sep := "\\. "
-		i := strings.Index(s, sep)
-		if i > 0 {
-			s = s[i+len(sep):]
+		if s == "" {
+			blockNumber++
+			return false
 		}
-		return strings.HasPrefix(s, name)
+		switch blockNumber {
+		case 0:
+			sep := "\\. "
+			i := strings.Index(s, sep)
+			if i > 0 {
+				s = s[i+len(sep):]
+			}
+			return strings.HasPrefix(s, name)
+		case 1:
+			return strings.HasPrefix(s, unorderedPrefix+name)
+		default:
+			return false
+		}
 	}
 	if rank > 0 {
 		m := fmt.Sprintf("%d\\. %s", rank, name)
 		match = func(s string) bool {
+			if blockNumber > 0 {
+				return false
+			}
+			if s == "" {
+				blockNumber++
+				return false
+			}
 			return strings.HasPrefix(s, m)
 		}
 	}
 
 	entries := strings.Split(msg.Content, "\n")
 	update := slices.DeleteFunc(entries, match)
+	content := strings.Join(update, "\n")
+	// clean up if laste unordered entry was deleted
+	content = strings.Replace(content, unorderedHeader+"\n\n", "", 1)
+	content = strings.TrimSuffix(content, "\n\n"+unorderedHeader)
 
-	_, err = s.ChannelMessageEdit(thread.ID, thread.ID, strings.Join(update, "\n"))
+	_, err = s.ChannelMessageEdit(thread.ID, thread.ID, content)
 	if err != nil {
 		log.Printf("failed to edit leaderboard %v: %v", thread.ID, err)
-		return fmt.Errorf("failed to edit leaderboard message")
+		return errors.New("failed to edit leaderboard message")
 	}
 
 	return nil

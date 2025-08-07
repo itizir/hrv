@@ -1,8 +1,10 @@
 package leaderboard
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,9 +28,8 @@ func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 					discordgo.TextInput{
 						Label:       "Rank",
 						Style:       discordgo.TextInputShort,
-						Placeholder: "Leaderboard position held",
+						Placeholder: "Leaderboard position held. Leave empty if unknown",
 						CustomID:    modalKeyRank,
-						MinLength:   1,
 						MaxLength:   6,
 					},
 				}},
@@ -36,9 +37,8 @@ func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 					discordgo.TextInput{
 						Label:       "Rank points",
 						Style:       discordgo.TextInputShort,
-						Placeholder: "Optional. prefix ~ if approx, suffix ? if guess",
+						Placeholder: "Optional. Prefix ~ if approx, suffix ? if guess",
 						CustomID:    modalKeyRankPoints,
-						Required:    false,
 						MaxLength:   10,
 					},
 				}},
@@ -47,7 +47,6 @@ func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 						Style:       discordgo.TextInputShort,
 						Placeholder: "Leave empty if reporting own rank",
 						CustomID:    modalKeyPlayer,
-						Required:    false,
 						MaxLength:   80,
 					},
 				}},
@@ -57,7 +56,6 @@ func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 						Placeholder: "Season number",
 						Value:       strconv.Itoa(currentSeason),
 						CustomID:    modalKeySeason,
-						Required:    false,
 						MaxLength:   2,
 					},
 				}},
@@ -91,11 +89,13 @@ func parseModalInput(s *discordgo.Session, i *discordgo.InteractionCreate) (ent 
 		return ent, 0, err
 	}
 
-	u, err := strconv.ParseUint(data[modalKeyRank], 10, 32)
-	if err != nil || u == 0 {
-		return ent, 0, fmt.Errorf("invalid rank value")
+	if v := data[modalKeyRank]; v != "" {
+		u, err := strconv.ParseUint(v, 10, 32)
+		if err != nil || u == 0 {
+			return ent, 0, errors.New("invalid rank value")
+		}
+		ent.rank = int(u)
 	}
-	ent.rank = int(u)
 
 	if v := data[modalKeyRankPoints]; v != "" {
 		if l := len(v); l > 0 && v[l-1] == '?' {
@@ -106,28 +106,25 @@ func parseModalInput(s *discordgo.Session, i *discordgo.InteractionCreate) (ent 
 			ent.approx = true
 			v = v[1:]
 		}
-		u, err = strconv.ParseUint(v, 10, 32)
+		u, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
-			return ent, 0, fmt.Errorf("invalid rank points value")
+			return ent, 0, errors.New("invalid rank points value")
 		}
 		ent.points = int(u)
 	}
 
 	if i.Member == nil {
-		return ent, 0, fmt.Errorf("command should be used within discord guild")
+		return ent, 0, errors.New("command should be used within discord guild")
 	}
 	if v := data[modalKeyPlayer]; v == "" {
 		ent.userID = i.Member.User.ID
 	} else {
-		mem, err := s.GuildMembersSearch(i.GuildID, v, 2)
+		ent.userID, err = findUserID(s, i.GuildID, v)
 		if err != nil {
 			log.Println("failed to look up user:", err)
-			return ent, 0, fmt.Errorf("failed to look up user")
+			return ent, 0, errors.New("failed to look up user")
 		}
-		// only use search result if unambiguous
-		if len(mem) == 1 {
-			ent.userID = mem[0].User.ID
-		} else {
+		if ent.userID == "" {
 			// don't go crazy with sanitisation, but don't allow callers to pollute with unexpected line breaks
 			ent.name = strings.ReplaceAll(v, "\n", " ")
 		}
@@ -137,7 +134,7 @@ func parseModalInput(s *discordgo.Session, i *discordgo.InteractionCreate) (ent 
 	if v := data[modalKeySeason]; v != "" {
 		u, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
-			return ent, 0, fmt.Errorf("invalid season value")
+			return ent, 0, errors.New("invalid season value")
 		}
 		season = int(u)
 	}
@@ -148,4 +145,31 @@ func parseModalInput(s *discordgo.Session, i *discordgo.InteractionCreate) (ent 
 	ent.timestamp = int(time.Now().Unix())
 
 	return ent, season, nil
+}
+
+// findUserID returns an empty string and no error if no unambiguous match was found
+func findUserID(s *discordgo.Session, guildID string, query string) (string, error) {
+	mem, err := s.GuildMembersSearch(guildID, query, 10)
+	if err != nil {
+		return "", err
+	}
+
+	// only use search result if unambiguous or exact match, prioritising username match
+	match := ""
+	if len(mem) > 1 {
+		mem = slices.DeleteFunc(mem, func(m *discordgo.Member) bool {
+			if m.User.Username == query {
+				match = m.User.ID
+				return false
+			}
+			return m.Nick != query
+		})
+	}
+	if match != "" {
+		return match, nil
+	}
+	if len(mem) == 1 {
+		return mem[0].User.ID, nil
+	}
+	return "", nil
 }
