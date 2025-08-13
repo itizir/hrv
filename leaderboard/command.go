@@ -2,6 +2,7 @@ package leaderboard
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -12,6 +13,10 @@ var (
 		Name:        "rank",
 		Description: "Report player rank for leaderboard",
 	}
+
+	// the fetch messages-update messages operation is very much non-atomic, so races could be bad
+	// don't want to go overboard trying to synchronise more elegantly...
+	yuckyMutex sync.Mutex
 )
 
 func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
