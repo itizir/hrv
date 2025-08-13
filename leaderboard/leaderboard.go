@@ -29,6 +29,11 @@ func editLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate) (stri
 		return "", err
 	}
 
+	if !yuckyMutex.TryLock() {
+		return "", fmt.Errorf("%s is currently busy, sorry; try again", userMention(i.AppID))
+	}
+	defer yuckyMutex.Unlock()
+
 	ld, err := getLeaderboardData(s, thread)
 	if err != nil {
 		log.Printf("failed to fetch leaderboard data from channel %v: %v", thread.ID, err)
