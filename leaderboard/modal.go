@@ -12,6 +12,13 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const (
+	modalKeyRank       = "rank"
+	modalKeyRankPoints = "rank_points"
+	modalKeyPlayer     = "player"
+	modalKeySeason     = "season"
+)
+
 func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	_, currentSeason, err := getSeasonThread(s, i.GuildID, i.AppID, -1)
 	if err != nil {
@@ -45,7 +52,7 @@ func presentModal(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 				discordgo.ActionsRow{Components: []discordgo.MessageComponent{
 					discordgo.TextInput{Label: "Player",
 						Style:       discordgo.TextInputShort,
-						Placeholder: "Leave empty if reporting own rank",
+						Placeholder: "Leave empty if reporting your own rank",
 						CustomID:    modalKeyPlayer,
 						MaxLength:   80,
 					},
