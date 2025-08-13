@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bwmarrin/discordgo"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"golang.org/x/text/number"
@@ -21,10 +20,6 @@ type entry struct {
 	guess      bool
 	reporterID string
 	timestamp  int
-}
-
-func userMention(id string) string {
-	return (&discordgo.User{ID: id}).Mention()
 }
 
 func (r entry) String() string {

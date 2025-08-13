@@ -20,16 +20,28 @@ func init() {
 // hmm, should we do partial matching, or somehow guild-specific? for now all a bit moot anyway...
 var leaderboardsForumName = "│leaderboards"
 
-const threadNamePrefix = "Season "
+const (
+	threadNamePrefix = "Season "
 
-func initialMessage(appID string) string {
+	leaderboardMessagePrefix  = "# Leaderboard"
+	unknownRankMessagePrefix  = "# Other Masters"
+	instructionsMessagePrefix = "# Instructions"
+
 	// OK, hardcoded MYM joke right there... But also probably accurate starting point.
-	msg := `1\. Fnovc2d (???)
+	initialMessage = leaderboardMessagePrefix + "\n1\\. Fnovc2d (???)"
 
+	placeholderMessage     = "-=RESERVED=-"
+	numPlaceholderMessages = 5
+)
+
+func instructionsMessage(appID string) string {
+	return instructionsMessagePrefix + `
 Add master rank players to the leaderboard by calling ` + userMention(appID) + `'s ` + "`rank`" + ` command (that can be invoked by simply typing ` + "`/rank`" + ` from anywhere on this server).
+Make sure not to confuse other bots' ` + "`/rank`" + ` with ` + userMention(appID) + `'s!
+
 You may optionally report exact (e.g. ` + "`35123`" + `), approximate (e.g. ` + "`~77000`" + `), or guessed (e.g. ` + "`180000?`" + `) rank points.
+
 If reporting for another Discord member, it isn't necessary to enter their whole name or username as long as it unambiguously identifies them; priority will be given to exact _username_ match.`
-	return msg
 }
 
 func getSeasonThread(s *discordgo.Session, guildID, authorID string, season int) (*discordgo.Channel, int, error) {
@@ -131,11 +143,21 @@ func createSeasonThread(s *discordgo.Session, guildID string, appID string, name
 		return err
 	}
 
-	thr, err := s.ForumThreadStart(c.ID, name, 0, initialMessage(appID))
+	thr, err := s.ForumThreadStart(c.ID, name, 0, initialMessage)
 	if err != nil {
 		return err
 	}
 
+	if _, err := s.ChannelMessageSend(thr.ID, instructionsMessage(appID)); err != nil {
+		return err
+	}
+	for range numPlaceholderMessages {
+		if _, err := s.ChannelMessageSend(thr.ID, placeholderMessage); err != nil {
+			return err
+		}
+	}
+
 	s.ChannelMessagePin(thr.ID, thr.ID) // try to pin, if permissions allow...
+
 	return nil
 }

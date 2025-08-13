@@ -5,89 +5,190 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-var (
-	ApplicationCommand = &discordgo.ApplicationCommand{
-		Type:        discordgo.ChatApplicationCommand,
-		Name:        "rank",
-		Description: "Report player rank for leaderboard",
-	}
-)
-
 const (
-	modalKeyRank       = "rank"
-	modalKeyRankPoints = "rank_points"
-	modalKeyPlayer     = "player"
-	modalKeySeason     = "season"
-
-	unorderedHeader = "Master-level players of unknown rank:"
 	unorderedPrefix = "- "
+
+	discordMessageLimit = 2000
 )
 
-func Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	msg := ""
-	switch i.Type {
-	case discordgo.InteractionApplicationCommand:
-		if err := presentModal(s, i); err != nil {
-			msg = err.Error()
-		}
-	case discordgo.InteractionModalSubmit:
-		if err := editLeaderboard(s, i); err != nil {
-			msg = fmt.Sprintf("Failed to edit leaderboard: %v.", err)
-		} else {
-			msg = "Leaderboard successfully edited."
-		}
-	default:
-		return fmt.Errorf("unhandled interaction type: %v", i.Type)
+// returns the ID of the leaderboard channel
+func editLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate) (string, error) {
+	ent, season, err := parseModalInput(s, i)
+	if err != nil {
+		return "", err
 	}
 
-	if msg != "" {
-		return s.InteractionRespond(i.Interaction,
-			&discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: msg,
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
+	thread, _, err := getSeasonThread(s, i.GuildID, i.AppID, season)
+	if err != nil {
+		return "", err
+	}
+
+	ld, err := getLeaderboardData(s, thread)
+	if err != nil {
+		log.Printf("failed to fetch leaderboard data from channel %v: %v", thread.ID, err)
+		return "", errors.New("failed to fetch messages")
+	}
+
+	if err := ld.addEntry(ent); err != nil {
+		return "", err
+	}
+
+	if err := ld.updateMessages(s); err != nil {
+		log.Printf("failed to edit leaderboard %v: %v", thread.ID, err)
+		return "", errors.New("failed to edit leaderboard message")
+	}
+
+	return thread.ID, nil
+}
+
+type discordMessage struct {
+	id      string
+	content string
+}
+
+type leaderboardData struct {
+	ranked    []string
+	unordered []string
+
+	channelID string
+	msgs      []discordMessage
+
+	appID string
+}
+
+func getLeaderboardData(s *discordgo.Session, thread *discordgo.Channel) (leaderboardData, error) {
+	ld := leaderboardData{channelID: thread.ID, appID: thread.OwnerID}
+
+	// ids are basically timestamps, and 'after' is strict, so decrement initial message by one...
+	tID, err := strconv.ParseUint(thread.ID, 10, 64)
+	if err != nil {
+		return ld, err
+	}
+	afterID := strconv.FormatUint(tID-1, 10)
+
+	// placeholders + top message + instructions. could fetch more to be sure, since we filter out other messages for safety below.
+	msgs, err := s.ChannelMessages(thread.ID, numPlaceholderMessages+2, "", afterID, "")
+	if err != nil {
+		return ld, err
+	}
+	if len(msgs) == 0 {
+		return ld, errors.New("no messages in channel")
+	}
+	msgs = slices.DeleteFunc(msgs, func(msg *discordgo.Message) bool {
+		return msg.Type != discordgo.MessageTypeDefault || msg.Author.ID != thread.OwnerID
+	})
+	// we get them in anti-chronological order
+	slices.Reverse(msgs)
+
+	inUnorderedSection := false
+	for _, msg := range msgs {
+		ld.msgs = append(ld.msgs, discordMessage{id: msg.ID, content: msg.Content})
+	linesLoop:
+		for _, l := range strings.Split(msg.Content, "\n") {
+			switch l {
+			case "", placeholderMessage, leaderboardMessagePrefix:
+				continue
+			case unknownRankMessagePrefix:
+				inUnorderedSection = true
+				continue
+			case instructionsMessagePrefix:
+				break linesLoop
+			}
+
+			if inUnorderedSection {
+				ld.unordered = append(ld.unordered, l)
+			} else {
+				ld.ranked = append(ld.ranked, l)
+			}
+		}
+	}
+
+	return ld, nil
+}
+
+func (ld leaderboardData) updateMessages(s *discordgo.Session) error {
+	currentMessageIndex := 0
+	currentPageContent := leaderboardMessagePrefix + "\n"
+
+	postPage := func() error {
+		if currentMessageIndex >= len(ld.msgs) {
+			return fmt.Errorf("ran out of pages (%d available)", len(ld.msgs))
+		}
+		msg := ld.msgs[currentMessageIndex]
+		if currentPageContent != msg.content {
+			if _, err := s.ChannelMessageEdit(ld.channelID, msg.id, currentPageContent); err != nil {
+				return err
+			}
+		}
+		currentMessageIndex++
+		currentPageContent = ""
+		return nil
+	}
+
+	printLines := func(lines []string) error {
+		for _, l := range lines {
+			// +1 to account for the newline separator
+			if len(currentPageContent)+len(l)+1 > discordMessageLimit {
+				if err := postPage(); err != nil {
+					return err
+				}
+			} else {
+				// avoid newline if it's the start of a page
+				currentPageContent += "\n"
+			}
+			currentPageContent += l
+		}
+		// could also compact the different sections onto the same pages if space allows, but ehh.
+		// this is a little cleaner, and if we need more space we can reserve more messages.
+		if currentPageContent != "" {
+			return postPage()
+		}
+		return nil
+	}
+
+	if err := printLines(ld.ranked); err != nil {
+		return err
+	}
+
+	if len(ld.unordered) > 0 {
+		currentPageContent = unknownRankMessagePrefix + "\n"
+
+		// ironic... :P
+		slices.Sort(ld.unordered)
+		if err := printLines(ld.unordered); err != nil {
+			return err
+		}
+	}
+
+	currentPageContent = instructionsMessage(ld.appID)
+	if err := postPage(); err != nil {
+		return err
+	}
+
+	for currentMessageIndex < len(ld.msgs) {
+		currentPageContent = placeholderMessage
+		if err := postPage(); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func editLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	ent, season, err := parseModalInput(s, i)
-	if err != nil {
-		return err
-	}
-
-	thread, _, err := getSeasonThread(s, i.GuildID, i.AppID, season)
-	if err != nil {
-		return err
-	}
-	msg, err := s.ChannelMessage(thread.ID, thread.ID)
-	if err != nil {
-		log.Printf("failed to fetch message %v: %v", thread.ID, err)
-		return errors.New("failed to fetch message")
-	}
-
-	blocks := strings.Split(msg.Content, "\n\n")
-	if len(blocks) == 0 {
-		return errors.New("empty post")
-	}
-
+func (ld *leaderboardData) addEntry(ent entry) error {
 	rankUnknown := ent.rank == 0
 
-	entries := strings.Split(blocks[0], "\n")
 	var (
 		added  bool
 		update []string
 	)
-	for _, e := range entries {
+	for _, e := range ld.ranked {
 		r, n, isID := getRankAndName(e)
 		if (isID && n == ent.userID) || n == ent.name {
 			if rankUnknown {
@@ -105,47 +206,38 @@ func editLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate) error
 		update = append(update, ent.String())
 		added = true
 	}
-	if added {
-		blocks[0] = strings.Join(update, "\n")
-	}
+	ld.ranked = update
 
-	var unorderedEntries []string
-	if len(blocks) > 1 && strings.HasPrefix(blocks[1], unorderedHeader) {
-		unorderedEntries = strings.Split(blocks[1], "\n")
-	} else if rankUnknown {
-		unorderedEntries = []string{unorderedHeader}
-	}
 	ent.rank = 0
 	newEntry := unorderedPrefix + ent.String()
 	if added {
-		unorderedEntries = slices.DeleteFunc(unorderedEntries, func(e string) bool { return e == newEntry })
+		ld.unordered = slices.DeleteFunc(ld.unordered, func(e string) bool { return e == newEntry })
 	} else {
-		if slices.Contains(unorderedEntries, newEntry) {
+		if slices.Contains(ld.unordered, newEntry) {
 			return errors.New("player already reported as master")
 		}
-		unorderedEntries = append(unorderedEntries, newEntry)
+		ld.unordered = append(ld.unordered, newEntry)
 	}
-	if l := len(unorderedEntries); l == 1 {
-		blocks = slices.Delete(blocks, 1, 2)
-	} else if l > 1 {
-		slices.Sort(unorderedEntries[1:])
-		unorderedBlock := strings.Join(unorderedEntries, "\n")
-		if len(blocks) == 1 {
-			blocks = append(blocks, unorderedBlock)
-		} else {
-			if !strings.HasPrefix(blocks[1], unorderedHeader) {
-				blocks = append(blocks, "")
-				copy(blocks[2:], blocks[1:])
-			}
-			blocks[1] = unorderedBlock
-		}
-	}
-
-	_, err = s.ChannelMessageEdit(thread.ID, thread.ID, strings.Join(blocks, "\n\n"))
-	if err != nil {
-		log.Printf("failed to edit leaderboard %v: %v", thread.ID, err)
-		return errors.New("failed to edit leaderboard message")
-	}
-
 	return nil
+}
+
+func (ld *leaderboardData) removeEntries(nameOrMention string, rank int) {
+	if rank == 0 {
+		ld.ranked = slices.DeleteFunc(ld.ranked, func(e string) bool {
+			_, after, _ := strings.Cut(e, "\\. ")
+			return strings.HasPrefix(after, nameOrMention)
+		})
+
+		prefix := unorderedPrefix + nameOrMention
+		ld.unordered = slices.DeleteFunc(ld.unordered, func(e string) bool {
+			return strings.HasPrefix(e, prefix)
+		})
+	}
+
+	if rank > 0 {
+		prefix := fmt.Sprintf("%d\\. %s", rank, nameOrMention)
+		ld.ranked = slices.DeleteFunc(ld.ranked, func(e string) bool {
+			return strings.HasPrefix(e, prefix)
+		})
+	}
 }
