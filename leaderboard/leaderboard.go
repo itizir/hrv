@@ -14,7 +14,7 @@ import (
 const (
 	unorderedPrefix = "- "
 
-	discordMessageLimit = 2000
+	discordMessageCharacterLimit = 2000
 )
 
 // returns the ID of the leaderboard channel
@@ -119,7 +119,7 @@ func getLeaderboardData(s *discordgo.Session, thread *discordgo.Channel) (leader
 
 func (ld leaderboardData) updateMessages(s *discordgo.Session) error {
 	currentMessageIndex := 0
-	currentPageContent := leaderboardMessagePrefix + "\n"
+	currentPageContent := leaderboardMessagePrefix
 
 	postPage := func() error {
 		if currentMessageIndex >= len(ld.msgs) {
@@ -139,12 +139,12 @@ func (ld leaderboardData) updateMessages(s *discordgo.Session) error {
 	printLines := func(lines []string) error {
 		for _, l := range lines {
 			// +1 to account for the newline separator
-			if len(currentPageContent)+len(l)+1 > discordMessageLimit {
+			if len(currentPageContent)+len(l)+1 > discordMessageCharacterLimit {
 				if err := postPage(); err != nil {
 					return err
 				}
 			} else {
-				// avoid newline if it's the start of a page
+				// avoid newline if it's the start of a page. for the very first line there should be a header in place already, so newline is fine
 				currentPageContent += "\n"
 			}
 			currentPageContent += l
@@ -162,7 +162,7 @@ func (ld leaderboardData) updateMessages(s *discordgo.Session) error {
 	}
 
 	if len(ld.unordered) > 0 {
-		currentPageContent = unknownRankMessagePrefix + "\n"
+		currentPageContent = unknownRankMessagePrefix
 
 		// ironic... :P
 		slices.Sort(ld.unordered)
